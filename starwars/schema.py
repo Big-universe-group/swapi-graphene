@@ -1,3 +1,4 @@
+# coding:utf8
 import sys
 reload(sys)
 sys.setdefaultencoding('utf-8')
@@ -39,6 +40,7 @@ Person.Connection = connection_for_type(Person)
 class Planet(DjangoObjectType):
     '''A large mass, planet or planetoid in the Star Wars Universe,
     at the time of 0 ABY.'''
+    #  id = graphene.ID(required=True)
     climates = graphene.List(graphene.String)
     terrains = graphene.List(graphene.String)
 
@@ -181,8 +183,8 @@ class Query(graphene.ObjectType):
 class CreateHero(graphene.ClientIDMutation):
 
     class Input:
-        name = graphene.String(required=True)
-        homeworld_id = graphene.String(required=True)
+        name = graphene.String(required=True)  # 名字
+        homeworld_id = graphene.String(required=True)  # 所属星系
 
     hero = graphene.Field(Hero)
     ok = graphene.Boolean()
@@ -195,6 +197,7 @@ class CreateHero(graphene.ClientIDMutation):
             homeworld_id = int(homeworld_id)
         except ValueError:
             try:
+                # 处理base64编码的homeworld id值
                 _type, homeworld_id = Node.from_global_id(homeworld_id)
                 assert _type == 'planet', 'The homeworld should be a Planet, but found {}'.format(resolved.type)
             except:
