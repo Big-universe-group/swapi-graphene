@@ -1,7 +1,7 @@
 # coding:utf8
 import sys
-reload(sys)
-sys.setdefaultencoding('utf-8')
+#  reload(sys)
+#  sys.setdefaultencoding('utf-8')
 
 import graphene
 from graphene import resolve_only_args, Node
@@ -9,7 +9,20 @@ from graphene_django import DjangoObjectType
 from graphene_django.filter import DjangoFilterConnectionField
 from graphene_django.debug import DjangoDebug
 
-import models
+from . import models
+
+
+class CustomNode(Node):
+    class Meta:
+        name = 'CustomNode'
+
+    @classmethod
+    def to_global_id(cls, type, id):
+        return id
+
+    @classmethod
+    def get_node_from_global_id(cls, global_id, context, info, only_type=None):
+        return info.return_type.graphene_type._meta.model.objects.get(id=global_id)
 
 
 def connection_for_type(_type):
@@ -32,7 +45,7 @@ class Person(DjangoObjectType):
         model = models.People
         exclude_fields = ('created', 'edited')
         filter_fields = ('name', )
-        interfaces = (Node, )
+        interfaces = (CustomNode, )
 
 Person.Connection = connection_for_type(Person)
 
@@ -40,9 +53,8 @@ Person.Connection = connection_for_type(Person)
 class Planet(DjangoObjectType):
     '''A large mass, planet or planetoid in the Star Wars Universe,
     at the time of 0 ABY.'''
-    #  id = graphene.ID(required=True)
-    climates = graphene.List(graphene.String)
-    terrains = graphene.List(graphene.String)
+    climates = graphene.List(graphene.String)  # 气候
+    terrains = graphene.List(graphene.String)  # 地形
 
     @resolve_only_args
     def resolve_climates(self):
@@ -54,7 +66,7 @@ class Planet(DjangoObjectType):
 
     class Meta:
         model = models.Planet
-        interfaces = (Node, )
+        interfaces = (CustomNode, )
         exclude_fields = ('created', 'edited', 'climate', 'terrain')
         filter_fields = ('name', )
 
@@ -71,7 +83,7 @@ class Film(DjangoObjectType):
     '''A single film.'''
     class Meta:
         model = models.Film
-        interfaces = (Node, )
+        interfaces = (CustomNode, )
         exclude_fields = ('created', 'edited', 'producer')
         filter_fields = {'episode_id': ('gt', )}
 
@@ -98,7 +110,7 @@ class Specie(DjangoObjectType):
 
     class Meta:
         model = models.Species
-        interfaces = (Node, )
+        interfaces = (CustomNode, )
         exclude_fields = ('created', 'edited', 'eye_colors', 'hair_colors',
                           'skin_colors')
 
@@ -115,7 +127,7 @@ class Vehicle(DjangoObjectType):
 
     class Meta:
         model = models.Vehicle
-        interfaces = (Node, )
+        interfaces = (CustomNode, )
         exclude_fields = ('created', 'edited', 'manufacturers')
         filter_fields = {'name': {'startswith'}}
 
@@ -127,7 +139,7 @@ class Hero(DjangoObjectType):
 
     class Meta:
         model = models.Hero
-        interfaces = (Node, )
+        interfaces = (CustomNode, )
         exclude_fields = ('created', 'edited')
         filter_fields = {'name': {'startswith', 'contains'}}
 
@@ -150,7 +162,7 @@ class Starship(DjangoObjectType):
 
     class Meta:
         model = models.Starship
-        interfaces = (Node, )
+        interfaces = (CustomNode, )
         exclude_fields = ('created', 'edited', 'manufacturers')
 
 Starship.Connection = connection_for_type(Starship)
@@ -164,14 +176,14 @@ class Query(graphene.ObjectType):
     all_planets = DjangoFilterConnectionField(Planet)
     all_starships = DjangoFilterConnectionField(Starship)
     all_heroes = DjangoFilterConnectionField(Hero)
-    film = Node.Field(Film)
-    specie = Node.Field(Specie)
-    character = Node.Field(Person)
-    vehicle = Node.Field(Vehicle)
-    planet = Node.Field(Planet)
-    starship = Node.Field(Starship)
-    hero = Node.Field(Hero)
-    node = Node.Field()
+    film = CustomNode.Field(Film)
+    specie = CustomNode.Field(Specie)
+    character = CustomNode.Field(Person)
+    vehicle = CustomNode.Field(Vehicle)
+    planet = CustomNode.Field(Planet)
+    starship = CustomNode.Field(Starship)
+    hero = CustomNode.Field(Hero)
+    node = CustomNode.Field()
     viewer = graphene.Field(lambda: Query)
 
     debug = graphene.Field(DjangoDebug, name='__debug')
@@ -180,7 +192,7 @@ class Query(graphene.ObjectType):
         return self
 
 
-class CreateHero(graphene.ClientIDMutation):
+class CreateHero(graphene.Mutation):
 
     class Input:
         name = graphene.String(required=True)  # 名字
@@ -189,16 +201,16 @@ class CreateHero(graphene.ClientIDMutation):
     hero = graphene.Field(Hero)
     ok = graphene.Boolean()
 
-    @classmethod
-    def mutate_and_get_payload(cls, input, info):
-        name = input.get('name')
-        homeworld_id = input.get('homeworld_id')
+    # 对象或者静态方法
+    def mutate(root, args, context, info):
+        name = args.get('name')
+        homeworld_id = args.get('homeworld_id')
         try:
             homeworld_id = int(homeworld_id)
         except ValueError:
             try:
                 # 处理base64编码的homeworld id值
-                _type, homeworld_id = Node.from_global_id(homeworld_id)
+                _type, homeworld_id = CustomNode.from_global_id(homeworld_id)
                 assert _type == 'planet', 'The homeworld should be a Planet, but found {}'.format(resolved.type)
             except:
                 raise Exception("Received wrong Planet id: {}".format(homeworld_id))
@@ -211,7 +223,8 @@ class CreateHero(graphene.ClientIDMutation):
 
 
 class Mutation(graphene.ObjectType):
-    create_hero = graphene.Field(CreateHero)
+    # 只有使用该方式, 才能在docs中获取正确的描述信息
+    create_hero = CreateHero.Field(description='创建一个英雄')
 
 
 schema = graphene.Schema(
